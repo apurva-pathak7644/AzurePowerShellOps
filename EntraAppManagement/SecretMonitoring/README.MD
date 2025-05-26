@@ -74,22 +74,6 @@ The script generates the following CSV files:
 
 Logs are stored at the path specified in `$LogPath`. Each log file is timestamped for traceability.
 
-## Known Limitations
-
-1. **Deprecated Modules**:
-   - The script uses `AzureAD` or `AzureADPreview` modules, which are deprecated. Consider migrating to the `Microsoft.Graph` module.
-
-2. **Rate Limits**:
-   - Azure AD API rate limits may affect execution in large tenants.
-
-3. **Performance**:
-   - The script may take time to execute for tenants with many applications or service principals.
-
-## Suggested Enhancements
-
-1. Parameterize the script for more flexibility.
-2. Transition to the `Microsoft.Graph` PowerShell module for better support.
-3. Add retry logic to handle transient API errors.
 
 ## Contributing
 
