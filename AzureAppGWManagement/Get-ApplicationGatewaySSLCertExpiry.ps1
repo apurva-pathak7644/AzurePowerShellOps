@@ -21,7 +21,7 @@ $expirationThreshold = $currentdate.AddDays($thresholdDays)
 $tenantId = "Tenant Id"
 $LogPath = "\Log\File\Path"
 $LogFile = "Log$(Get-Date -Format "ddMMyyyyhhmmssss").txt"
-$result_dir = "\File\Path\AppGatewayCertExpiry"
+$result_dir = "\File\Path\"
 $result_file = "AppGatewaysCert_ExpiringIn_$($thresholdDays)Days_$(Get-Date -Format "ddMMyyyyhhmmssss").csv"
  
 #Functions declarations
@@ -72,7 +72,7 @@ $certificates = @()
  
 try {
  
-Write-Log -Loglevel "Info" -LogMessage "Listing all active business suscriptions"
+Write-Log -Loglevel "Info" -LogMessage "Listing all active suscriptions"
 $subscriptions = Get-AzSubscription | Where-Object {$_.State -EQ "Enabled"}
 foreach ($subscription in $subscriptions){
 if ((Get-AzContext).Subscription.Name -ne $subscription.Name){
