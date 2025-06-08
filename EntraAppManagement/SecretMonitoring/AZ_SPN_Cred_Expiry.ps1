@@ -62,7 +62,7 @@ Function ConnectToAzure {
 
 
 Write-Log -Loglevel "Info" -LogMessage "Connecting to Azure AD"
-Connect-AzureAD -TenantId $TenantId
+Connect-MgGraph -TenantId $TenantId 
 
     }
 
@@ -82,97 +82,82 @@ try {
 
 Write-Log -Loglevel "Info" -LogMessage "Initializing flow to get Application Registration secret/certificate expiry details."
 
-Write-Log -Loglevel "Info" -LogMessage "Fetching all application registrations in tenant"
-$applications = Get-AzureADApplication -All:$true
+Write-Log -Loglevel "Info" -LogMessage "Fetching all Application Registrations in tenant"
+$applications = Get-MgApplication -All
 
-Write-Log -Loglevel "Info" -LogMessage "Listed all application registrations in tenant, total $($applications.count) applications registrations are found."
-
+Write-Log -Loglevel "Info" -LogMessage "Listed all Application Registrations in tenant, total $($applications.count) Application Registrations found."
 foreach ($application in $applications){
-
   
-     $secrets = Get-AzureADApplicationPasswordCredential -ObjectId $application.ObjectId
-
-    Write-Log -Loglevel "Info" -LogMessage "Application $($application.DisplayName) has $($secrets.count) secrets."
+     $secrets = (Get-MgApplication -ApplicationId $application.Id).PasswordCredentials | Where-Object DisplayName -NotContains "CWAP_AuthSecret"
+     Write-Log -Loglevel "Info" -LogMessage "Application '$($application.DisplayName)' has $($secrets.count) secret(s)."
 
      $sec_count = $($secrets.count)
-
      
             foreach ($secret in $secrets){
 
-
-               $secret_expiry_date = $secret.EndDate
-                Write-Log -Loglevel "Info" -LogMessage "Checking secret with secret Id $($secret.KeyId) expiry for application: $($application.DisplayName)"
-
+               $secret_expiry_date = $secret.EndDateTime
+               Write-Log -Loglevel "Info" -LogMessage "Checking secret with key Id $($secret.KeyId) expiry for application: $($application.DisplayName)"
 
                 if ($secret_expiry_date -ne $null -and $secret_expiry_date -lt $expirationThreshold -and $secret_expiry_date -gt $currentdate){
 
-                    Write-Log -Loglevel "Info" -LogMessage "Secret(s) with key ID $($secret.KeyId) of Application $($application.DisplayName) with ObjectId $($application.ObjectId) is expiring on $($secret.EndDate)" | 
+                    Write-Log -Loglevel "Info" -LogMessage "Secret with key ID $($secret.KeyId) of Application $($application.DisplayName) with ObjectId $($application.Id) is expiring on $($secret.EndDate)" | 
                     
                     Select-Object @{Name="AppName"; Expression={$($application.DisplayName)}},`
-                    @{Name="AppObjId"; Expression={$($application.ObjectId)}},`
+                    @{Name="AppObjId"; Expression={$($application.Id)}},`
                     @{Name="SecretId"; Expression={$($secret.KeyId)}},`
-                    @{Name="SecretExpiryDate"; Expression={$($secret.EndDate)}} | 
+                    @{Name="SecretExpiryDate"; Expression={$($secret.EndDateTime)}} |
+                    Export-Csv -Path "$appregistrations_result_dir\$appregistrations_result_file" -Append -NoTypeInformation                                
+                }
 
-                    Export-Csv -Path "$appregistrations_result_dir\$appregistrations_result_file" -Append -NoTypeInformation
-                                
-                }      
-                         
-            
+                if ($secret_expiry_date -lt $currentdate ) {
+                
+                    Write-Log -Loglevel "Info" -LogMessage "Secret is already expired for '$($application.DisplayName)'"
+                                 
+                 }
     
             }
 
-     $certificates = Get-AzureADApplicationKeyCredential -ObjectId $application.ObjectId
+     $certificates = (Get-MgApplication -ApplicationId $application.Id).KeyCredentials
+     Write-Log -Loglevel "Info" -LogMessage "Application '$($application.DisplayName)' has $($certificates.count) certificate(s)."
 
-     Write-Log -Loglevel "Info" -LogMessage "Application $($application.DisplayName) has $($certificates.count) certificates."
-
-     $cert_count = $($certificates.count)
-    
+     $cert_count = $($certificates.count)    
 
         foreach ($certificate in $certificates){
 
-
-                $certificate_expiry_date = $certificate.EndDate
-
-                Write-Log -Loglevel "Info" -LogMessage "Checking certificate with secret Id $($secret.KeyId) expiry for application: $($application.DisplayName)"
+                $certificate_expiry_date = $certificate.EndDateTime
+                Write-Log -Loglevel "Info" -LogMessage "Checking certificate with key Id $($secret.KeyId) expiry for application: $($application.DisplayName)"
 
                 if ($certificate_expiry_date -ne $null -and $certificate_expiry_date -lt $expirationThreshold -and $certificate_expiry_date -gt $currentdate){
                 
-                    Write-Log -Loglevel "Info" -LogMessage  "Certificate(s) with key ID $($secret.KeyId) of Application $($application.DisplayName) with ObjectId $($application.ObjectId) is expiring on $($certificate.EndDate)" | 
+                    Write-Log -Loglevel "Info" -LogMessage  "Certificate with key ID $($secret.KeyId) of Application $($application.DisplayName) with ObjectId $($application.Id) is expiring on $($certificate.EndDate)" | 
                     
                     Select-Object @{Name="AppName"; Expression={$($application.DisplayName)}},`
-                    @{Name="AppObjId"; Expression={$($application.ObjectId)}},`
+                    @{Name="AppObjId"; Expression={$($application.Id)}},`
                     @{Name="SecretId"; Expression={$($secret.KeyId)}},`
-                    @{Name="SecretExpiryDate"; Expression={$($certificate.EndDate)}} |
-
-                    Export-Csv -Path "$appregistrations_result_dir\$appregistrations_Nosecrets_file" -Append -NoTypeInformation
+                    @{Name="SecretExpiryDate"; Expression={$($certificate.EndDateTime)}} |
+                    Export-Csv -Path "$appregistrations_result_dir\$appregistrations_result_file" -Append -NoTypeInformation
                                                 
                 }
                 
                 if ($certificate_expiry_date -lt $currentdate ) {
                 
-                   Write-Log -Loglevel "Info" -LogMessage "Certificate is already expired for $($application.DisplayName)"
+                   Write-Log -Loglevel "Info" -LogMessage "Certificate is already expired for '$($application.DisplayName)'"
                                 
-                }                     
-          
+                }          
             
-            }   
-
+            }
 
             if ($sec_count -eq '0'){
 
-
                 if ($cert_count -eq '0'){
-
             
-                     Write-Log -Loglevel "Info" -LogMessage "Application $($application.DisplayName) has 0 secrets/certificates it could be an Enterprise Application."| 
+                     Write-Log -Loglevel "Info" -LogMessage "Application '$($application.DisplayName)' has 0 secrets/certificates, it might be an Enterprise Application."| 
 
                      Select-Object @{Name="AppName"; Expression={$($application.DisplayName)}},`
-                     @{Name="AppObjId"; Expression={$($application.ObjectId)}} |
-
+                     @{Name="AppObjId"; Expression={$($application.Id)}} |
                      Export-Csv -Path "$appregistrations_Nosecrets_dir\$appregistrations_Nosecrets_file" -Append -NoTypeInformation
 
-                                    }
-                            
+                                    }                            
                         }
                
 
@@ -191,49 +176,42 @@ Function GetEnterpiseAppCerts {
 
     try {
 
-# Geting certificate details for Enterprise Applications
+# Get certificate details for Enterprise Applications
 
 Write-Log -Loglevel "Info" -LogMessage "Initializing flow to get Enterprise Applications certificate expiry details."
 
 Write-Log -Loglevel "Info" -LogMessage "Fetching all Enterprise Applications in the tenant"
-$enterprise_applications = Get-AzureADServicePrincipal -All $true
+$enterprise_applications = Get-MgServicePrincipal -All | Where-Object {$_.ServicePrincipalType -NE "ManagedIdentity"}
 
-Write-Log -Loglevel "Info" -LogMessage "Listed all Enterprise Applications in tenant, total $($enterprise_applications.count) applications registrations are found."
-
+Write-Log -Loglevel "Info" -LogMessage "Listed all Enterprise Applications in tenant, total $($enterprise_applications.count)  Enterprise Applications found."
 foreach ($enterprise_application in $enterprise_applications){
 
   
-     $entra_certificates = Get-AzureADServicePrincipalPasswordCredential -ObjectId $enterprise_application.ObjectId
+     $entra_certificates = (Get-MgServicePrincipal -ServicePrincipalId $enterprise_application.Id).PasswordCredentials
+     Write-Log -Loglevel "Info" -LogMessage "Enterprise Application '$($enterprise_application.DisplayName)' has $($entra_certificates.count) certificate(s)."
 
-     Write-Log -Loglevel "Info" -LogMessage "Enterprise Application $($enterprise_application.DisplayName) has $($entra_certificates.count) certificates."
-
-     $entra_cert_count = $($entra_certificates.count)
-    
+     $entra_cert_count = $($entra_certificates.count)    
 
         foreach ($entra_certificate in $entra_certificates){
 
-
-                $entra_certificate_expiry_date = $entra_certificate.EndDate
-
-                Write-Log -Loglevel "Info" -LogMessage "Checking certificate with secret Id $($entra_certificate.KeyId) expiry for application: $($enterprise_application.DisplayName)"
+                $entra_certificate_expiry_date = $entra_certificate.EndDateTime
+                Write-Log -Loglevel "Info" -LogMessage "Checking certificate with key Id $($entra_certificate.KeyId) expiry for application: $($enterprise_application.DisplayName)"
 
                 if ($entra_certificate_expiry_date -ne $null -and $entra_certificate_expiry_date -lt $expirationThreshold -and $entra_certificate_expiry_date -gt $currentdate){
                 
-                    Write-Log -Loglevel "Info" -LogMessage  "Certificate(s) with key ID $($entra_certificate.KeyId) of Enterprise Application $($enterprise_application.DisplayName) with ObjectId $($enterprise_application.ObjectId) is expiring on $($entra_certificate.EndDate)" |
+                    Write-Log -Loglevel "Info" -LogMessage  "Certificate with key ID $($entra_certificate.KeyId) of Enterprise Application $($enterprise_application.DisplayName) with ObjectId $($enterprise_application.ObjectId) is expiring on $($entra_certificate.EndDate)" |
 
                     Select-Object @{Name="AppName"; Expression={$($enterprise_application.DisplayName)}},`
-                    @{Name="AppObjId"; Expression={$($enterprise_application.ObjectId)}},`
+                    @{Name="AppObjId"; Expression={$($enterprise_application.Id)}},`
                     @{Name="SecretId"; Expression={$($entra_certificate.KeyId)}},`
-                    @{Name="SecretExpiryDate"; Expression={$($entra_certificate.EndDate)}} |
-
-                    Export-Csv -Path "$enterpriseapplications_result_dir\$enterpriseapplications_result_file" -Append -NoTypeInformation
-                                                
+                    @{Name="SecretExpiryDate"; Expression={$($entra_certificate.EndDateTime)}} |
+                    Export-Csv -Path "$enterpriseapplications_result_dir\$enterpriseapplications_result_file" -Append -NoTypeInformation                                                
                 }
                 
                 if ($entra_certificate_expiry_date -lt $currentdate ) {
                 
-                   Write-Log -Loglevel "Info" -LogMessage "Certificate is already expired for $($enterprise_application.DisplayName)"
-                                
+                   Write-Log -Loglevel "Info" -LogMessage "Certificate is already expired for '$($enterprise_application.DisplayName)'"
+
                 }        
           
             
@@ -245,8 +223,7 @@ foreach ($enterprise_application in $enterprise_applications){
                      Write-Log -Loglevel "Info" -LogMessage "Enterprise Application $($enterprise_application.DisplayName) has 0 certificates."|
 
                      Select-Object @{Name="AppName"; Expression={$($enterprise_application.DisplayName)}},`
-                     @{Name="AppObjId"; Expression={$($enterprise_application.ObjectId)}} |
-
+                     @{Name="AppObjId"; Expression={$($enterprise_application.Id)}} |
                      Export-Csv -Path "$enterprise_application_Nocerts_dir\$enterprise_application_Nocerts_file" -Append -NoTypeInformation
 
                                     }
@@ -263,8 +240,6 @@ catch {
 }
 
 }
-
-
 
 #Call functions to start the flow
 
