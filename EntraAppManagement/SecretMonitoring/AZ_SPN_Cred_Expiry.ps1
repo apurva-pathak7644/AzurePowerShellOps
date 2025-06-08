@@ -12,7 +12,8 @@
 #      
 #   Ensure you have:-
 #
-#       1. 'AzureADPreview Module' or 'AzureAD Module' installed.
+#       1. Ensure the identity, which you're using to run this script, has atleast 'Application.Read.All' or 'Directory.Read.All' 
+#          permission(s) with MS Graph.
 #       2. The identity which you are running this script with has appropriated rights to list applications in Azure AD/ Entra Id.
 #
 #-----------------------------------------------------------------------------------------------------------------------------------
